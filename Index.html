@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moderiertes Quizspiel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background-color: #0D1117;
+      color: #FFFFFF;
+      overflow-x: hidden;
+    }
+    main {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      text-align: center;
+      animation: fadeSwitch 0.5s ease-in-out;
+    }
+    h1, h2, h3 {
+      color: #FFA500;
+      text-shadow: 0 0 10px #FFA50088;
+      animation: fadeIn 1s ease-in-out;
+    }
+    button {
+      background-color: #FFA500;
+      color: #0D1117;
+      border: none;
+      padding: 1rem 2rem;
+      margin: 1rem;
+      font-size: 1rem;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s;
+    }
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 10px #FFA500AA;
+    }
+    input[type="number"], input[type="text"] {
+      padding: 0.5rem;
+      margin: 0.5rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      background-color: #161B22;
+      color: #FFFFFF;
+    }
+    #timerBarWrapper {
+      margin-top: 1rem;
+      height: 20px;
+      width: 100%;
+      background: #222;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      position: relative;
+    }
+    #timerBar {
+      height: 100%;
+      background-color: #00BFFF;
+      width: 100%;
+      transition: width 1s linear;
+    }
+    #timerDisplay {
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-top: 0.5rem;
+      font-size: 1.1rem;
+      color: #FFFFFF;
+      font-weight: bold;
+    }
+    .group-active {
+      border-bottom: 2px solid #00BFFF;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { text-shadow: 0 0 5px #00BFFF88, 0 0 10px #00BFFF88; }
+      50% { text-shadow: 0 0 20px #00BFFFCC, 0 0 30px #00BFFFCC; }
+      100% { text-shadow: 0 0 5px #00BFFF88, 0 0 10px #00BFFF88; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes fadeSwitch {
+      0% { opacity: 0; transform: scale(0.95); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2rem;
+    }
+    th, td {
+      padding: 0.75rem;
+      border-bottom: 1px solid #AAAAAA44;
+      text-align: left;
+    }
+    #footer {
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      text-align: center;
+      color: #AAAAAA;
+      font-size: 0.8rem;
+      padding: 0.5rem;
+    }
+    .answer-glow {
+      color: #3399FF;
+      text-shadow: 0 0 10px #3399FF88, 0 0 20px #3399FF88;
+      margin: 1rem 0;
+      font-size: 1.2rem;
+    }
+    .file-label {
+      display: inline-block;
+      background: linear-gradient(135deg, #FFA500, #FF8C00);
+      color: #0D1117;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
+    }
+    .file-label:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 12px #FFA50099;
+    }
+    .file-label.uploaded {
+      background-color: #28a745;
+      box-shadow: 0 0 10px #28a74588;
+    }
+    #filenameDisplay {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      color: #AAAAAA;
+    }
+    #exampleFormat {
+      text-align: left;
+      background-color: #161B22;
+      padding: 1rem;
+      margin-top: 1rem;
+      border-radius: 5px;
+      font-family: monospace;
+      color: #AAAAAA;
+    }
+  </style>
+</head>
+<body>
+  <main id="app"></main>
+  <div id="footer">Programmiert von Felix</div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.24/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    const app = document.getElementById('app');
+    let groups = [];
+    let questions = [];
+    let currentQuestion = null;
+    let usedQuestions = [];
+    let currentGroupIndex = 0;
+    let fileName = "";
+    let timerInterval = null;
+
+    function renderStartScreen() {
+      app.innerHTML = `
+        <h1>Moderiertes Quizspiel</h1>
+        <label>Wie viele Gruppen nehmen teil? (2–10)</label><br>
+        <input type="number" id="groupCount" min="2" max="10"><br>
+        <button onclick="setupGroups()">Weiter</button>
+      `;
+    }
+
+    function setupGroups() {
+      const count = parseInt(document.getElementById('groupCount').value);
+      if (isNaN(count) || count < 2 || count > 10) return;
+
+      let html = `<h2>Gruppennamen eingeben</h2>`;
+      for (let i = 0; i < count; i++) {
+        html += `<input type="text" id="group${i}" placeholder="Gruppe ${i + 1}" required><br>`;
+      }
+      html += `<button onclick="validateAndRenderFileUpload(${count})">Weiter</button>`;
+      app.innerHTML = html;
+    }
+
+    function validateAndRenderFileUpload(groupCount) {
+      let isValid = true;
+      groups = [];
+      for (let i = 0; i < groupCount; i++) {
+        const input = document.getElementById(`group${i}`);
+        if (!input || !input.value.trim()) {
+          isValid = false;
+          input.style.border = '2px solid red';
+        } else {
+          groups.push({ name: input.value.trim(), score: 0 });
+          input.style.border = '';
+        }
+      }
+      if (!isValid) return;
+      renderFileUpload(groupCount);
+    }
+
+    function renderFileUpload(groupCount) {
+      let html = `
+        <h2>Fragen-Datei hochladen</h2>
+        <label class="file-label" id="uploadLabel">Datei auswählen
+          <input type="file" id="questionFile" accept=".txt" style="display:none" onchange="handleFileUpload(${groupCount})">
+        </label>
+        <div id="filenameDisplay"></div>
+        <pre id="exampleFormat">Beispiel für Fragenformat:
+Frage 1?
+>>Antwort 1
+---
+Frage 2?
+>>Antwort 2
+---</pre>
+      `;
+      app.innerHTML = html;
+    }
+
+    function handleFileUpload(groupCount) {
+      const fileInput = document.getElementById('questionFile');
+      const label = document.getElementById('uploadLabel');
+      const display = document.getElementById('filenameDisplay');
+      const file = fileInput.files[0];
+      if (!file) return;
+      fileName = file.name;
+      label.classList.add('uploaded');
+      display.textContent = `Hochgeladene Datei: ${fileName}`;
+
+      questions.length = 0;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const lines = e.target.result.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].startsWith('>>')) continue;
+          if (!lines[i] || lines[i] === '---') continue;
+          const question = lines[i];
+          const answer = lines[i+1]?.startsWith('>>') ? lines[i+1].substring(2).trim() : '';
+          questions.push({ question, answer });
+        }
+        renderStartQuizButton();
+      }
+      reader.readAsText(file);
+    }
+
+    function renderStartQuizButton() {
+      const startButton = document.createElement('button');
+      startButton.textContent = 'Spiel starten';
+      startButton.onclick = startQuiz;
+      app.appendChild(startButton);
+    }
+
+    function startQuiz() {
+      nextQuestion();
+    }
+
+    function nextQuestion() {
+      if (questions.length === 0) return showLeaderboard();
+      const idx = Math.floor(Math.random() * questions.length);
+      currentQuestion = questions.splice(idx, 1)[0];
+      usedQuestions.push(currentQuestion);
+      currentGroupIndex = 0;
+      renderQuestion();
+    }
+
+    function renderQuestion() {
+      app.innerHTML = `
+        <div>
+          <h2>${currentQuestion.question}</h2>
+          <p class="answer-glow">${currentQuestion.answer}</p>
+          <div id="timerBarWrapper">
+            <div id="timerBar"></div>
+            <div id="timerDisplay">30</div>
+          </div>
+          <button onclick="startTimer()">Bedenkzeit starten</button>
+        </div>
+      `;
+      app.querySelector('button').style.display = 'inline-block';
+      setTimeout(() => {
+        app.querySelector('button').style.animation = 'fadeSwitch 0.5s ease-in-out';
+      }, 100);
+    }
+
+    function startTimer() {
+      let width = 100;
+      let secondsLeft = 30;
+      document.getElementById('timerDisplay').textContent = secondsLeft;
+      document.querySelector('button').style.display = 'none'; // Button entfernen
+      timerInterval = setInterval(() => {
+        width -= (100 / 30);
+        secondsLeft--;
+        document.getElementById('timerBar').style.width = width + '%';
+        document.getElementById('timerDisplay').textContent = secondsLeft;
+        if (width <= 0) {
+          clearInterval(timerInterval);
+          askGroup();
+        }
+      }, 1000);
+    }
+
+    function askGroup() {
+      if (currentGroupIndex >= groups.length) {
+        showAnswer();
+        return;
+      }
+      const group = groups[currentGroupIndex];
+      app.innerHTML = `
+        <div>
+          <h2>Antwort von <span class="group-active">${group.name}</span></h2>
+          <div style="display: flex; justify-content: center;">
+            <button onclick="markAnswer('correct')">Richtig</button>
+            <button onclick="markAnswer('wrong')">Falsch</button>
+            <button onclick="markAnswer('none')">Keine Antwort</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function markAnswer(result) {
+      if (result === 'correct') groups[currentGroupIndex].score++;
+      currentGroupIndex++;
+      askGroup();
+    }
+
+    function showAnswer() {
+      app.innerHTML = `
+        <div>
+          <h2>Richtige Antwort:</h2>
+          <p class="answer-glow">${currentQuestion.answer}</p>
+          <button onclick="nextQuestion()">Weiter</button>
+        </div>
+      `;
+    }
+
+    function showLeaderboard() {
+      groups.sort((a, b) => b.score - a.score);
+      let html = `<h2>Ergebnisse</h2><table>`;
+      html += `<tr><th>Platz</th><th>Gruppe</th><th>Punkte</th></tr>`;
+      groups.forEach((group, index) => {
+        html += `<tr><td>${index + 1}</td><td>${group.name}</td><td>${group.score}</td></tr>`;
+      });
+      html += `</table>`;
+      html += `
+        <button onclick="startNewQuiz()">Neues Quiz</button>
+        <button onclick="saveResultsAsPDF()">Ergebnisse speichern</button>
+      `;
+      app.innerHTML = html;
+    }
+
+    function startNewQuiz() {
+      // Zurücksetzen
+      groups = [];
+      questions = [];
+      usedQuestions = [];
+      fileName = "";
+
+      renderStartScreen();
+    }
+
+    function saveResultsAsPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.text("Quiz Ergebnisse", 20, 10);
+      doc.autoTable({
+        head: [['Platz', 'Gruppe', 'Punkte']],
+        body: groups.map((group, index) => [index + 1, group.name, group.score])
+      });
+      doc.save('ergebnisse.pdf');
+    }
+
+    renderStartScreen();
+  </script>
+</body>
+</html>
